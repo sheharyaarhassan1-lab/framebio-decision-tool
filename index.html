@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Sheharyaar Hassan">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>FrameBio Decision Tool</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one working column (table -> priorities -> results), results split into chart + ranking on wide screens.
+   Palette follows the DC13 deck: navy ink, teal accent, light blue panels, orange for warnings/winner ring. */
+:root {
+  --bg: #F5F8FA; --surface: #FFFFFF; --panel: #EAF3F8; --ink: #0E2841; --text: #1E2B38; --muted: #586A7B;
+  --line: #D3DFE8; --accent: #156082; --accent-ink: #FFFFFF; --accent-soft: #CFE4EF; --good: #196B24;
+  --warn: #A8480F; --warn-soft: #FCEBDD; --ring: #E97132; --dom: #A7B3BE; --grid: #E3EAF0;
+  --font-body: "Public Sans", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B1724; --surface: #0F2234; --panel: #15304A; --ink: #E7EFF6; --text: #D2DDE7; --muted: #95A8BA;
+    --line: #24425E; --accent: #56B6DB; --accent-ink: #08131E; --accent-soft: #1C4664; --good: #6CCB86;
+    --warn: #F2A574; --warn-soft: #3A2414; --ring: #F08A4B; --dom: #5F7488; --grid: #1C3550; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0B1724; --surface: #0F2234; --panel: #15304A; --ink: #E7EFF6; --text: #D2DDE7; --muted: #95A8BA;
+  --line: #24425E; --accent: #56B6DB; --accent-ink: #08131E; --accent-soft: #1C4664; --good: #6CCB86;
+  --warn: #F2A574; --warn-soft: #3A2414; --ring: #F08A4B; --dom: #5F7488; --grid: #1C3550; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+h1, h2, h3 { color: var(--ink); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.6rem, 3.2vw, 2.15rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+h3 { font-size: 0.98rem; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.lead { max-width: 68ch; color: var(--text); }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+header { display: grid; gap: 10px; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 6px 10px; border-radius: 6px;
+  background: var(--panel); color: var(--ink); width: fit-content; max-width: 100%; }
+.check .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: none; }
+.check.fail .dot { background: var(--warn); }
+section.step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.stepno { width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 0.85rem;
+  display: inline-grid; place-items: center; flex: none; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button, .filebtn { font: inherit; font-size: 0.9rem; font-weight: 600; border-radius: 7px; padding: 8px 13px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+button:hover, .filebtn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:focus-visible, .filebtn:focus-within, input:focus-visible, select:focus-visible, textarea:focus-visible, circle:focus-visible {
+  outline: 3px solid var(--ring); outline-offset: 2px; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filebtn { position: relative; display: inline-flex; }
+textarea { width: 100%; min-height: 110px; font-family: var(--font-mono); font-size: 0.82rem; padding: 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); resize: vertical; }
+.drop.over textarea { border-color: var(--accent); background: var(--panel); }
+.status { font-size: 0.9rem; color: var(--ink); }
+.errors { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 12px 14px; font-size: 0.9rem; }
+.errors ul { margin: 6px 0 0; padding-left: 18px; }
+.note { background: var(--panel); border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; color: var(--ink); }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th { text-align: left; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+  padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 5px 10px; font-weight: 500; background: var(--surface); color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+input[type=number] { width: 84px; font: inherit; font-family: var(--font-mono); padding: 5px 7px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent); }
+select { font: inherit; font-size: 0.88rem; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); max-width: 100%; }
+.share { display: inline-block; height: 7px; border-radius: 4px; background: var(--accent); vertical-align: middle; }
+.radio { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.9rem; }
+.radio label { display: inline-flex; gap: 6px; align-items: center; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.stat { background: var(--panel); border-radius: 9px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; }
+.stat b { font-size: 1.45rem; color: var(--ink); font-family: var(--font-mono); font-weight: 500; overflow-wrap: anywhere; }
+.stat.win b { font-family: var(--font-body); font-weight: 700; font-size: 1.2rem; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.panel { border: 1px solid var(--line); border-radius: 9px; padding: 14px; display: grid; gap: 10px; min-width: 0; align-content: start; }
+.chartwrap { position: relative; }
+svg text { fill: var(--muted); font-family: var(--font-body); font-size: 12.5px; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 0.8rem; padding: 7px 9px;
+  border-radius: 6px; max-width: 240px; line-height: 1.35; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.rank { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) minmax(60px, 1fr) 4.2em; gap: 8px; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.rank:last-child { border-bottom: 0; }
+.rank .bar { height: 9px; border-radius: 5px; background: var(--accent-soft); position: relative; overflow: hidden; }
+.rank .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 5px; }
+.rank.top { font-weight: 700; color: var(--ink); }
+.rank .nm { overflow-wrap: anywhere; }
+.pill { font-size: 0.72rem; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+summary { cursor: pointer; font-weight: 700; color: var(--ink); }
+details .body { display: grid; gap: 10px; margin-top: 12px; max-width: 75ch; }
+.formula { font-family: var(--font-mono); background: var(--panel); border-radius: 7px; padding: 8px 10px; font-size: 0.85rem; overflow-x: auto; color: var(--ink); }
+footer { font-size: 0.82rem; color: var(--muted); max-width: 80ch; display: grid; gap: 4px; }
+footer b { color: var(--ink); }
+.author { color: var(--ink); font-size: 0.95rem; }
+@media (prefers-reduced-motion: no-preference) { .rank .bar i { transition: width .25s ease; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">FrameBio Decision Tool · version 1.0 · November 2026</span>
+    <h1>Find the best trade-offs, then pick one</h1>
+    <p class="author">Developed by <b>Sheharyaar Hassan</b>, doctoral researcher, FrameBio DC13 · TFTAK / TalTech</p>
+    <p class="lead">Put in a table of options and criteria. The tool removes options that are worse on every criterion
+      (<b>MOO</b>, Multi-Objective Optimisation) and ranks the rest with your priorities (<b>MCDM</b>, Multi-Criteria
+      Decision Making, TOPSIS method). Everything runs in your browser: your data is not sent anywhere.</p>
+    <div id="selfcheck" class="check"><span class="dot"></span><span>Checking the calculation…</span></div>
+  </header>
+
+  <section class="step" aria-labelledby="h1s">
+    <h2 id="h1s"><span class="stepno">1</span>Your table</h2>
+    <div class="row">
+      <button id="exFeed" type="button">Example: SCP feedstocks (published)</button>
+      <button id="exDesign" type="button">Example: process designs (made-up)</button>
+      <label class="filebtn">Upload CSV file<input id="file" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+    </div>
+    <div class="drop" id="drop">
+      <label for="paste" class="small muted">Or paste a table here (from Excel: select the cells, copy, paste):</label>
+      <textarea id="paste" spellcheck="false" placeholder="Option,Cost,CO2,Survival&#10;direction,MIN,MIN,MAX&#10;weight,1,1,1&#10;Design A,95,37,81&#10;Design B,80,30,78"></textarea>
+    </div>
+    <div class="row">
+      <button id="usePaste" class="primary" type="button">Use pasted table</button>
+      <button id="copyTpl" type="button">Copy empty template</button>
+      <span id="tplMsg" class="small muted" aria-live="polite"></span>
+    </div>
+    <p class="small muted">Format: first row = criterion names, first column = option names. Optional rows named
+      <span class="mono">direction</span> (MIN = lower is better, MAX = higher is better) and <span class="mono">weight</span>.
+      Comma, semicolon or tab separated. Decimal commas work with semicolons or tabs.</p>
+    <div id="status" class="status" aria-live="polite"></div>
+    <div id="errors" class="errors" hidden></div>
+  </section>
+
+  <section class="step" aria-labelledby="h2s">
+    <h2 id="h2s"><span class="stepno">2</span>Criteria and priorities</h2>
+    <div id="guessNote" class="note" hidden>Directions were guessed from the criterion names. Please check each one.</div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Use</th><th>Criterion</th><th>Better when</th><th>Weight</th><th>Share</th></tr></thead>
+        <tbody id="critBody"></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <button id="eqW" type="button">Set equal weights</button>
+      <span class="small muted">Weights do not need to add up to 1. Only their ratio matters.</span>
+    </div>
+    <div class="radio" role="radiogroup" aria-label="Which options to rank">
+      <label><input type="radio" name="rankset" id="rsP" value="pareto" checked> Rank only the best trade-offs (recommended)</label>
+      <label><input type="radio" name="rankset" id="rsA" value="all"> Rank all options</label>
+    </div>
+  </section>
+
+  <section class="step" aria-labelledby="h3s">
+    <h2 id="h3s"><span class="stepno">3</span>Results</h2>
+    <div id="resultMsg" class="note" hidden></div>
+    <div class="summary" id="summary"></div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <h3>Trade-off chart</h3>
+          <div class="row small">
+            <label for="xSel" class="muted">x</label><select id="xSel"></select>
+            <label for="ySel" class="muted">y</label><select id="ySel"></select>
+          </div>
+        </div>
+        <div class="chartwrap" id="chartwrap"><div id="chart"></div><div id="tip" class="tip" hidden></div></div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--accent)"></i>best trade-off (kept)</span>
+          <span><i class="sw" style="background:var(--dom)"></i>removed (another option is better)</span>
+          <span><i class="sw" style="border:2px solid var(--ring)"></i>top choice</span>
+        </div>
+        <p class="small muted" id="chartNote"></p>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between"><h3>Ranking (TOPSIS score, 0 to 1)</h3><span id="rankInfo" class="pill"></span></div>
+        <div id="ranking"></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Removed options and why</h3>
+        <div id="removed"></div>
+      </div>
+      <div class="panel">
+        <h3>How stable is the top choice?</h3>
+        <p class="small muted">We re-ranked 4,000 times with random weights. Each bar is how often that option came first.</p>
+        <div id="smaa"></div>
+        <p class="small" id="eqWinner"></p>
+      </div>
+    </div>
+    <div class="row">
+      <button id="copyRes" type="button">Copy results</button>
+      <span id="copyMsg" class="small muted" aria-live="polite"></span>
+    </div>
+    <textarea id="copyFallback" hidden readonly aria-label="Results as text"></textarea>
+  </section>
+
+  <details>
+    <summary>How it works, and how we know it is correct</summary>
+    <div class="body">
+      <p><b>Step 1, MOO (Pareto filter).</b> Option B beats option A when B is at least as good on every criterion and
+        strictly better on at least one. Every beaten option is removed. What is left are the best trade-offs: for each of
+        them, nothing better exists. Identical options never beat each other, so copies are all kept.</p>
+      <p><b>Step 2, MCDM (TOPSIS).</b> All criteria are put on one scale, multiplied by their weights, and each option is
+        scored by how close it is to the best possible option and how far from the worst.</p>
+      <div class="formula">r = x / √(Σ x²)   →   v = weight × r   →   score = D⁻ / (D⁺ + D⁻)</div>
+      <p class="small muted">D⁺ is the distance to the best value on every criterion, D⁻ the distance to the worst. A score of 1 is perfect.
+        Scores are relative to the options being ranked: if you add or remove options, the scores change.</p>
+      <p><b>Step 3, stability check.</b> The ranking is repeated with thousands of random weightings (an SMAA-type check).
+        If the same option wins most of the time, the choice does not depend much on the exact weights.</p>
+      <p><b>Tested.</b> This is the same calculation as our tested Python version (decision_core.py, 30 automatic tests).
+        TOPSIS reproduces all published scores of Bērziņa et al. (2024), Agronomy Research 22(S1), doi:10.15159/AR.24.039,
+        and the Pareto filter finds exactly the 101 true front points of the ZDT1 benchmark (Zitzler, Deb &amp; Thiele 2000).
+        The check at the top of this page re-runs the published example every time the page opens.</p>
+      <p><b>Limits.</b> The result is only as good as the numbers you put in. The tool chooses only among the options in
+        your table; it does not invent new ones.</p>
+    </div>
+  </details>
+
+  <footer>
+    <p><b>Developed by Sheharyaar Hassan</b> (TFTAK / TalTech) as part of the FrameBio doctoral network, DC13:
+      a MOO and MCDM framework for sustainable bioprocess decisions.</p>
+    <p>Contact: <span class="mono">sheharyaar.hassan@tftak.eu</span></p>
+    <p>Please cite as: Hassan, S. (2026). <i>FrameBio Decision Tool</i>, version 1.0. TFTAK / Tallinn University of Technology.</p>
+    <p>Example 1 uses published data from Bērziņa et al. 2024 with the published weights. Example 2 uses made-up numbers
+      to show how the tool works.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var TIE = 1e-12;
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function fmt(x) {
+    if (!isFinite(x)) return String(x);
+    var a = Math.abs(x);
+    if (a !== 0 && (a >= 1e6 || a < 1e-3)) return x.toExponential(2);
+    return Number(x.toPrecision(4)).toLocaleString("en-GB", { maximumFractionDigits: 4 });
+  }
+
+  // ------------------------------------------------------------------ examples
+  var EXAMPLES = {
+    feed: {
+      label: "SCP feedstocks: 11 options × 10 criteria, published weights (Bērziņa et al. 2024)",
+      crit: [["Biomass yield (g/g)", "MAX", 0.105], ["Biomass concentration (g/L)", "MAX", 0.103],
+             ["Protein content (%)", "MAX", 0.123], ["Production rate (g/L/h)", "MAX", 0.11],
+             ["Availability (Mt/year)", "MAX", 0.099], ["Shelf life (1–10)", "MAX", 0.074],
+             ["Seasonality (months/year)", "MAX", 0.084], ["Storage cost (1–10)", "MIN", 0.078],
+             ["Pre-treatment cost (EUR/t)", "MIN", 0.104], ["Substrate price (EUR/t)", "MIN", 0.121]],
+      rows: [["Glycerin", 0.73, 21.8, 43, 1.37, 6.3, 10, 12, 1, 0, 150],
+             ["Fruit residues", 0.12, 9.4, 50.8, 0.2, 57, 1, 6, 10, 18.21, 280],
+             ["Straw hydrolysate", 0.31, 10.1, 31.3, 0.56, 319, 10, 12, 1, 391.3, 44],
+             ["Molasses", 0.635, 127, 54.3, 2.65, 50, 10, 12, 5, 0, 560],
+             ["Potato starch", 0.356, 26.7, 41.5, 0.25, 65, 1, 4, 10, 11.93, 900],
+             ["Potato pomace", 0.52, 52.7, 24.4, 0.72, 50, 1, 4, 10, 18.21, 300],
+             ["Spent grain residue", 0.72, 64.8, 32, 0.9, 47.7, 10, 12, 10, 18.21, 280],
+             ["Cheese whey", 0.1, 16, 43.4, 0.38, 139, 1, 12, 10, 0, 0],
+             ["Brewery residues", 0.53, 16.97, 31.8, 0.31, 38, 1, 12, 10, 18.21, 95],
+             ["Fish residues", 0.17, 56.8, 36.5, 0.47, 27.85, 1, 12, 10, 0, 230],
+             ["Used cooking oil", 0.12, 57.37, 12.6, 0.478, 2.85, 10, 12, 5, 0, 140]],
+      // TOPSIS scores saved in the authors' supplementary workbook (sheet "Substrates", cells A74:A84)
+      expected: [0.5703903360312595, 0.4637296294710144, 0.4712010152846191, 0.6439468510536662, 0.4052032069759372,
+                 0.504346309786532, 0.5581255399845513, 0.540127256218303, 0.5003927212321144, 0.5027278886308013,
+                 0.5085676026683748],
+      x: 9, y: 2
+    },
+    design: {
+      label: "Process designs: 7 options × 4 criteria (made-up numbers for demonstration)",
+      crit: [["Cost (€/kg)", "MIN", 1], ["Climate (kg CO₂-eq/kg)", "MIN", 1], ["Investment (k€)", "MIN", 1],
+             ["Cell survival (%)", "MAX", 1]],
+      rows: [["Design A: small batch, no air", 95, 37, 120, 81], ["Design B: small batch, air", 80, 30, 135, 78],
+             ["Design C: large batch, no air", 60, 28, 480, 81], ["Design D: large batch, air + heme", 27, 18, 520, 70],
+             ["Design E: medium batch, air", 55, 24, 300, 76], ["Design F: medium batch, late harvest", 72, 35, 310, 72],
+             ["Design G: large batch, air", 40, 21, 500, 74]],
+      x: 0, y: 1
+    }
+  };
+
+  // ------------------------------------------------------------------ maths (same rules as decision_core.py)
+  function dominates(b, a, dirs) {
+    var better = false;
+    for (var k = 0; k < dirs.length; k++) {
+      if (dirs[k] === "MIN") { if (b[k] > a[k]) return false; if (b[k] < a[k]) better = true; }
+      else { if (b[k] < a[k]) return false; if (b[k] > a[k]) better = true; }
+    }
+    return better;
+  }
+  function pareto(X, dirs) {
+    var dom = X.map(function (a, i) {
+      var out = [];
+      for (var j = 0; j < X.length; j++) if (j !== i && dominates(X[j], a, dirs)) out.push(j);
+      return out;
+    });
+    var kept = dom.map(function (d) { return d.length === 0; });
+    var witness = dom.map(function (d) { for (var t = 0; t < d.length; t++) if (kept[d[t]]) return d[t]; return null; });
+    return { kept: kept, dominatedBy: dom, witness: witness };
+  }
+  function topsis(X, W, dirs) {
+    var m = X.length, n = W.length, j, i;
+    if (m < 2) return { error: "one" };
+    var norm = [], dropped = [];
+    for (j = 0; j < n; j++) {
+      var s = 0; for (i = 0; i < m; i++) s += X[i][j] * X[i][j];
+      norm.push(Math.sqrt(s)); if (norm[j] === 0) dropped.push(j);
+    }
+    var V = X.map(function (row) { return row.map(function (x, k) { return norm[k] ? W[k] * (x / norm[k]) : 0; }); });
+    var best = [], worst = [];
+    for (j = 0; j < n; j++) {
+      var col = V.map(function (r) { return r[j]; });
+      var mx = Math.max.apply(null, col), mn = Math.min.apply(null, col);
+      best.push(dirs[j] === "MAX" ? mx : mn); worst.push(dirs[j] === "MAX" ? mn : mx);
+    }
+    var score = [];
+    for (i = 0; i < m; i++) {
+      var dp = 0, dm = 0;
+      for (j = 0; j < n; j++) { dp += Math.pow(V[i][j] - best[j], 2); dm += Math.pow(V[i][j] - worst[j], 2); }
+      dp = Math.sqrt(dp); dm = Math.sqrt(dm);
+      if (dp + dm === 0) return { error: "identical" };
+      score.push(dm / (dp + dm));
+    }
+    return { score: score, dropped: dropped };
+  }
+  function rankScores(sc) {
+    var order = sc.map(function (_, i) { return i; }).sort(function (a, b) { return sc[b] - sc[a]; });
+    var ranks = new Array(sc.length), k = 0;
+    while (k < order.length) {
+      var g = [order[k]];
+      while (k + g.length < order.length && sc[g[0]] - sc[order[k + g.length]] <= TIE) g.push(order[k + g.length]);
+      g.forEach(function (i) { ranks[i] = k + 1; });
+      k += g.length;
+    }
+    return ranks;
+  }
+  function rng(seed) {
+    return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+
+  // ------------------------------------------------------------------ parsing and checks
+  function splitLine(line, d) {
+    var out = [], cur = "", q = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line[i];
+      if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true; else if (ch === d) { out.push(cur); cur = ""; } else cur += ch;
+    }
+    out.push(cur);
+    return out.map(function (c) { return c.trim(); });
+  }
+  function toNumber(raw, delim) {
+    if (raw === undefined || raw === null || String(raw).trim() === "") return { missing: true };
+    var s = String(raw).replace(/[\s ]/g, "");
+    if (/^[-+]?(inf|infinity|∞)$/i.test(s)) return { inf: true };
+    if (/^nan$/i.test(s)) return { nan: true };
+    if (delim !== "," && /^[-+]?\d*,\d+$/.test(s)) s = s.replace(",", ".");
+    if (!/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return { bad: true };
+    var n = Number(s);
+    if (!isFinite(n)) return { inf: true };
+    return { n: n };
+  }
+  function parseDir(s) {
+    var t = String(s || "").trim().toLowerCase();
+    if (/^(min|minimise|minimize|lower|low|less|-|cost)$/.test(t)) return "MIN";
+    if (/^(max|maximise|maximize|higher|high|more|\+|benefit)$/.test(t)) return "MAX";
+    return null;
+  }
+  function guessDir(name) {
+    return /cost|price|time|co2|co₂|emission|ghg|carbon|water|energy|fossil|waste|invest|capex|opex|risk|impact|toxic|land/i.test(name) ? "MIN" : "MAX";
+  }
+  function fromText(text) {
+    var lines = text.replace(/\r\n?/g, "\n").split("\n").filter(function (l) { return l.trim() !== ""; });
+    if (!lines.length) return { errors: ["The table is empty. Paste or upload a table first."] };
+    var delim = ",", most = 0;
+    ["\t", ";", ","].forEach(function (d) { var c = splitLine(lines[0], d).length; if (c > most) { most = c; delim = d; } });
+    var rows = lines.map(function (l) { return splitLine(l, delim); });
+    var header = rows[0];
+    if (header.length < 2) return { errors: ["The first row needs an option-name column and at least one criterion column."] };
+    var names = header.slice(1).map(function (h, i) { return h || "Criterion " + (i + 1); });
+    var dirRow = null, wRow = null, data = [];
+    rows.slice(1).forEach(function (r) {
+      var key = (r[0] || "").toLowerCase();
+      if (/^(direction|directions|dir|better)$/.test(key)) dirRow = r;
+      else if (/^(weight|weights|w)$/.test(key)) wRow = r;
+      else data.push(r);
+    });
+    var errors = [], guessed = !dirRow;
+    var crit = names.map(function (nm, j) {
+      var d = dirRow ? parseDir(dirRow[j + 1]) : guessDir(nm);
+      if (dirRow && !d) { errors.push("Direction for “" + nm + "”: write MIN (lower is better) or MAX (higher is better), not “" + (dirRow[j + 1] || "empty") + "”."); d = "MAX"; }
+      var w = 1;
+      if (wRow) {
+        var t = toNumber(wRow[j + 1], delim);
+        if (t.missing) errors.push("Weight for “" + nm + "” is missing.");
+        else if (t.n === undefined) errors.push("Weight for “" + nm + "”: “" + wRow[j + 1] + "” is not a number.");
+        else if (t.n < 0) errors.push("Weight for “" + nm + "” cannot be negative.");
+        else w = t.n;
+      }
+      return { name: nm, dir: d, w: w, on: true };
+    });
+    var X = [], opts = [];
+    data.forEach(function (r, i) {
+      var nm = r[0] || "Option " + (i + 1);
+      opts.push(nm);
+      X.push(names.map(function (c, j) {
+        var raw = r[j + 1], t = toNumber(raw, delim);
+        var where = "“" + nm + "”, “" + c + "”: ";
+        if (t.missing) errors.push(where + "value is missing.");
+        else if (t.nan) errors.push(where + "value is NaN (not a number).");
+        else if (t.inf) errors.push(where + "value is infinite.");
+        else if (t.bad) errors.push(where + "“" + raw + "” is not a number.");
+        return t.n;
+      }));
+    });
+    if (opts.length < 2) errors.push("Add at least 2 options (rows) to compare.");
+    return { names: opts, X: X, crit: crit, errors: errors, guessed: guessed };
+  }
+  function fromExample(key) {
+    var e = EXAMPLES[key];
+    return { names: e.rows.map(function (r) { return r[0]; }), X: e.rows.map(function (r) { return r.slice(1); }),
+             crit: e.crit.map(function (c) { return { name: c[0], dir: c[1], w: c[2], on: true }; }),
+             errors: [], guessed: false, x: e.x, y: e.y };
+  }
+
+  // ------------------------------------------------------------------ state + UI
+  var S = null, source = "", copyText = "";
+  function load(data, label) {
+    var err = $("errors");
+    if (data.errors && data.errors.length) {
+      err.hidden = false;
+      var list = data.errors.slice(0, 12).map(function (e) { return "<li>" + esc(e) + "</li>"; }).join("");
+      err.innerHTML = "<b>The table could not be used. Please fix:</b><ul>" + list + "</ul>" +
+        (data.errors.length > 12 ? "<p>…and " + (data.errors.length - 12) + " more.</p>" : "");
+      return;
+    }
+    err.hidden = true;
+    S = data; S.x = data.x || 0; S.y = data.y === undefined ? Math.min(1, data.crit.length - 1) : data.y;
+    source = label;
+    $("status").textContent = "Loaded: " + label;
+    $("guessNote").hidden = !data.guessed;
+    renderCrit(); compute();
+  }
+  function renderCrit() {
+    var tot = S.crit.reduce(function (a, c) { return a + (c.on ? c.w : 0); }, 0) || 1;
+    $("critBody").innerHTML = S.crit.map(function (c, j) {
+      var share = c.on ? c.w / tot : 0;
+      return "<tr><td><input type='checkbox' id='on" + j + "' data-j='" + j + "' class='cOn' " + (c.on ? "checked" : "") +
+        " aria-label='Use " + esc(c.name) + "'></td><td>" + esc(c.name) + "</td><td><span class='seg'>" +
+        "<button type='button' class='cDir' data-j='" + j + "' data-d='MIN' aria-pressed='" + (c.dir === "MIN") + "'>Lower</button>" +
+        "<button type='button' class='cDir' data-j='" + j + "' data-d='MAX' aria-pressed='" + (c.dir === "MAX") + "'>Higher</button></span></td>" +
+        "<td><input type='number' min='0' step='any' id='w" + j + "' class='cW' data-j='" + j + "' value='" + c.w + "' aria-label='Weight of " + esc(c.name) + "'></td>" +
+        "<td class='num small'><span class='share' style='width:" + Math.round(share * 80) + "px'></span> " + Math.round(share * 100) + "%</td></tr>";
+    }).join("");
+  }
+  $("critBody").addEventListener("click", function (e) {
+    var b = e.target.closest(".cDir"); if (!b) return;
+    S.crit[+b.dataset.j].dir = b.dataset.d; renderCrit(); compute();
+  });
+  $("critBody").addEventListener("change", function (e) {
+    var t = e.target, j = +t.dataset.j;
+    if (t.classList.contains("cOn")) S.crit[j].on = t.checked;
+    if (t.classList.contains("cW")) { var v = Number(t.value); S.crit[j].w = isFinite(v) && v >= 0 ? v : 0; }
+    renderCrit(); compute();
+  });
+  $("eqW").addEventListener("click", function () { if (!S) return; S.crit.forEach(function (c) { c.w = 1; }); renderCrit(); compute(); });
+  ["rsP", "rsA"].forEach(function (id) { $(id).addEventListener("change", compute); });
+  $("xSel").addEventListener("change", function () { S.x = +this.value; drawChart(); });
+  $("ySel").addEventListener("change", function () { S.y = +this.value; drawChart(); });
+
+  var R = null;
+  function message(html) { var m = $("resultMsg"); m.hidden = !html; m.innerHTML = html || ""; }
+  function compute() {
+    if (!S) return;
+    var on = []; S.crit.forEach(function (c, j) { if (c.on) on.push(j); });
+    if (!on.length) { message("Switch on at least one criterion."); clearResults(); return; }
+    var W = on.map(function (j) { return S.crit[j].w; }), dirs = on.map(function (j) { return S.crit[j].dir; });
+    if (!W.some(function (w) { return w > 0; })) { message("All weights are 0. Give at least one criterion a weight above 0."); clearResults(); return; }
+    var X = S.X.map(function (r) { return on.map(function (j) { return r[j]; }); });
+    var P = pareto(X, dirs);
+    var keptIdx = []; P.kept.forEach(function (k, i) { if (k) keptIdx.push(i); });
+    var setIdx = $("rsA").checked ? S.names.map(function (_, i) { return i; }) : keptIdx;
+    R = { on: on, dirs: dirs, W: W, X: X, P: P, keptIdx: keptIdx, setIdx: setIdx, scores: null, ranks: null, msg: "" };
+    var msgs = [];
+    if (keptIdx.length === S.names.length) msgs.push("All " + S.names.length + " options are best trade-offs: each one is better than every other option on at least one criterion. So the Pareto filter cannot choose here, and the ranking decides.");
+    if (setIdx.length === 1) {
+      msgs.push("Only one best option is left: <b>" + esc(S.names[setIdx[0]]) + "</b>. It is at least as good as every other option on every criterion, so no ranking is needed.");
+    } else {
+      var t = topsis(setIdx.map(function (i) { return X[i]; }), W, dirs);
+      if (t.error === "identical") msgs.push("All options being ranked have the same values on every weighted criterion, so they cannot be ranked.");
+      else {
+        R.scores = t.score; R.ranks = rankScores(t.score);
+        if (t.dropped.length) msgs.push("Ignored in the ranking because every value is 0: " + t.dropped.map(function (k) { return "“" + esc(S.crit[on[k]].name) + "”"; }).join(", ") + ".");
+      }
+    }
+    message(msgs.join("<br>"));
+    renderSummary(); drawChart(); renderRanking(); renderRemoved(); renderSmaa(); buildCopy();
+  }
+  function clearResults() { ["summary", "chart", "ranking", "removed", "smaa"].forEach(function (id) { $(id).innerHTML = ""; }); $("eqWinner").textContent = ""; R = null; }
+  function winners() {
+    if (!R) return [];
+    if (R.setIdx.length === 1) return [R.setIdx[0]];
+    if (!R.ranks) return [];
+    return R.setIdx.filter(function (_, k) { return R.ranks[k] === 1; });
+  }
+  function renderSummary() {
+    var w = winners();
+    var top = w.length ? w.map(function (i) { return S.names[i]; }).join(" = ") : "–";
+    var sc = (w.length && R.scores) ? " · score " + R.scores[R.setIdx.indexOf(w[0])].toFixed(3) : "";
+    $("summary").innerHTML =
+      "<div class='stat'><span class='small muted'>Options in your table</span><b>" + S.names.length + "</b></div>" +
+      "<div class='stat'><span class='small muted'>Best trade-offs (kept)</span><b>" + R.keptIdx.length + "</b></div>" +
+      "<div class='stat'><span class='small muted'>Removed (beaten)</span><b>" + (S.names.length - R.keptIdx.length) + "</b></div>" +
+      "<div class='stat win'><span class='small muted'>Top choice" + esc(sc) + "</span><b>" + esc(top) + "</b></div>";
+  }
+  function renderRanking() {
+    $("rankInfo").textContent = R.setIdx.length === S.names.length && !$("rsA").checked ? "all options are kept" :
+      ($("rsA").checked ? "ranking all options" : "ranking the " + R.setIdx.length + " kept options");
+    if (!R.scores) { $("ranking").innerHTML = "<p class='small muted'>No ranking to show.</p>"; return; }
+    var order = R.setIdx.map(function (_, k) { return k; }).sort(function (a, b) { return R.scores[b] - R.scores[a]; });
+    $("ranking").innerHTML = order.map(function (k) {
+      var i = R.setIdx[k], top = R.ranks[k] === 1;
+      return "<div class='rank" + (top ? " top" : "") + "'><span class='num'>" + R.ranks[k] + "</span><span class='nm'>" + esc(S.names[i]) +
+        (R.P.kept[i] ? "" : " <span class='pill'>removed by MOO</span>") + "</span><span class='bar'><i style='width:" +
+        (R.scores[k] * 100).toFixed(1) + "%'></i></span><span class='num'>" + R.scores[k].toFixed(3) + "</span></div>";
+    }).join("");
+  }
+  function renderRemoved() {
+    var rem = []; R.P.kept.forEach(function (k, i) { if (!k) rem.push(i); });
+    if (!rem.length) { $("removed").innerHTML = "<p class='small muted'>None. Every option is best at something.</p>"; return; }
+    $("removed").innerHTML = "<div class='scroll'><table><thead><tr><th>Option</th><th>Beaten by</th><th>The winner is better on</th></tr></thead><tbody>" +
+      rem.map(function (i) {
+        var w = R.P.witness[i], better = [];
+        R.on.forEach(function (j, k) {
+          var a = R.X[i][k], b = R.X[w][k];
+          if (R.dirs[k] === "MIN" ? b < a : b > a) better.push(S.crit[j].name);
+        });
+        return "<tr><td>" + esc(S.names[i]) + "</td><td>" + esc(S.names[w]) + "</td><td class='small'>" + esc(better.join(", ")) + "</td></tr>";
+      }).join("") + "</tbody></table></div><p class='small muted'>The winner is also at least as good on every other criterion.</p>";
+  }
+  function renderSmaa() {
+    if (!R.scores) { $("smaa").innerHTML = "<p class='small muted'>Needs at least 2 options to rank.</p>"; $("eqWinner").textContent = ""; return; }
+    var Xs = R.setIdx.map(function (i) { return R.X[i]; }), n = R.W.length, N = 4000, r = rng(20261109);
+    var cnt = new Array(Xs.length).fill(0), used = 0;
+    for (var t = 0; t < N; t++) {
+      var w = []; for (var k = 0; k < n; k++) w.push(-Math.log(1 - r()));
+      var res = topsis(Xs, w, R.dirs); if (res.error) continue;
+      var rk = rankScores(res.score), firsts = []; rk.forEach(function (v, q) { if (v === 1) firsts.push(q); });
+      firsts.forEach(function (q) { cnt[q] += 1 / firsts.length; }); used++;
+    }
+    var order = cnt.map(function (_, q) { return q; }).sort(function (a, b) { return cnt[b] - cnt[a]; }).filter(function (q) { return cnt[q] > 0; }).slice(0, 6);
+    $("smaa").innerHTML = order.map(function (q) {
+      var p = used ? cnt[q] / used : 0;
+      return "<div class='rank'><span></span><span class='nm'>" + esc(S.names[R.setIdx[q]]) + "</span><span class='bar'><i style='width:" + (p * 100).toFixed(1) + "%'></i></span><span class='num'>" + Math.round(p * 100) + "%</span></div>";
+    }).join("") || "<p class='small muted'>No result.</p>";
+    var eq = topsis(Xs, R.W.map(function () { return 1; }), R.dirs);
+    if (!eq.error) {
+      var er = rankScores(eq.score), ew = []; er.forEach(function (v, q) { if (v === 1) ew.push(S.names[R.setIdx[q]]); });
+      $("eqWinner").innerHTML = "With equal weights the top choice is <b>" + esc(ew.join(" = ")) + "</b>.";
+    }
+  }
+  // ------------------------------------------------------------------ chart
+  function ticks(lo, hi, count) {
+    if (lo === hi) { lo -= 1; hi += 1; }
+    var step = Math.pow(10, Math.floor(Math.log10((hi - lo) / count))), err = (hi - lo) / count / step;
+    step *= err >= 7.5 ? 10 : err >= 3 ? 5 : err >= 1.5 ? 2 : 1;
+    var a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step, out = [];
+    for (var v = a; v <= b + step / 2; v += step) out.push(+v.toPrecision(12));
+    return out;
+  }
+  function drawChart() {
+    var sel = function (id, cur) {
+      $(id).innerHTML = S.crit.map(function (c, j) { return "<option value='" + j + "'" + (j === cur ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("");
+    };
+    sel("xSel", S.x); sel("ySel", S.y);
+    var W = 560, H = 360, ml = 58, mr = 16, mt = 14, mb = 46;
+    var xs = S.X.map(function (r) { return r[S.x]; }), ys = S.X.map(function (r) { return r[S.y]; });
+    var tx = ticks(Math.min.apply(null, xs), Math.max.apply(null, xs), 5), ty = ticks(Math.min.apply(null, ys), Math.max.apply(null, ys), 5);
+    var x0 = tx[0], x1 = tx[tx.length - 1], y0 = ty[0], y1 = ty[ty.length - 1];
+    var X = function (v) { return ml + (v - x0) / (x1 - x0) * (W - ml - mr); }, Y = function (v) { return H - mb - (v - y0) / (y1 - y0) * (H - mt - mb); };
+    var win = winners(), g = "";
+    tx.forEach(function (v) { g += "<line x1='" + X(v) + "' x2='" + X(v) + "' y1='" + mt + "' y2='" + (H - mb) + "' stroke='var(--grid)'/><text x='" + X(v) + "' y='" + (H - mb + 16) + "' text-anchor='middle'>" + esc(fmt(v)) + "</text>"; });
+    ty.forEach(function (v) { g += "<line x1='" + ml + "' x2='" + (W - mr) + "' y1='" + Y(v) + "' y2='" + Y(v) + "' stroke='var(--grid)'/><text x='" + (ml - 8) + "' y='" + (Y(v) + 4) + "' text-anchor='end'>" + esc(fmt(v)) + "</text>"; });
+    var cx = S.crit[S.x], cy = S.crit[S.y];
+    g += "<text x='" + ((ml + W - mr) / 2) + "' y='" + (H - 8) + "' text-anchor='middle'>" + esc(cx.name) + (cx.dir === "MIN" ? "  (lower is better)" : "  (higher is better)") + "</text>";
+    g += "<text transform='translate(14," + ((mt + H - mb) / 2) + ") rotate(-90)' text-anchor='middle'>" + esc(cy.name) + (cy.dir === "MIN" ? "  (lower is better)" : "  (higher is better)") + "</text>";
+    var idx = S.names.map(function (_, i) { return i; }).sort(function (a, b) { return (R && R.P.kept[a] ? 1 : 0) - (R && R.P.kept[b] ? 1 : 0); });
+    idx.forEach(function (i) {
+      var kept = R && R.P.kept[i];
+      g += "<circle tabindex='0' data-i='" + i + "' cx='" + X(xs[i]).toFixed(1) + "' cy='" + Y(ys[i]).toFixed(1) + "' r='" + (kept ? 7 : 6) + "' fill='" + (kept ? "var(--accent)" : "var(--dom)") +
+        "' stroke='var(--surface)' stroke-width='1.5' aria-label='" + esc(S.names[i]) + "'/>";
+      if (win.indexOf(i) >= 0) g += "<circle cx='" + X(xs[i]).toFixed(1) + "' cy='" + Y(ys[i]).toFixed(1) + "' r='12' fill='none' stroke='var(--ring)' stroke-width='2.5' pointer-events='none'/>";
+    });
+    $("chart").innerHTML = "<svg viewBox='0 0 " + W + " " + H + "' width='100%' role='img' aria-label='Trade-off chart of " + esc(cx.name) + " against " + esc(cy.name) + "'>" + g + "</svg>";
+    $("chartNote").textContent = R && R.on.length > 2 ? "Kept or removed is decided on all " + R.on.length + " criteria, so a kept option can look beaten in this two-criterion view." : "";
+  }
+  function showTip(el) {
+    var i = +el.dataset.i, tip = $("tip");
+    var rows = S.crit.map(function (c, j) { return esc(c.name) + ": " + esc(fmt(S.X[i][j])); }).slice(0, 6).join("<br>");
+    tip.innerHTML = "<b>" + esc(S.names[i]) + "</b><br>" + (R && R.P.kept[i] ? "best trade-off" : "removed") + "<br>" + rows;
+    tip.hidden = false;
+    var box = $("chartwrap").getBoundingClientRect(), r = el.getBoundingClientRect();
+    var left = r.left - box.left + 14, top = r.top - box.top - 10;
+    if (left + 240 > box.width) left = Math.max(0, r.left - box.left - 250);
+    tip.style.left = left + "px"; tip.style.top = Math.max(0, top) + "px";
+  }
+  $("chart").addEventListener("pointerover", function (e) { if (e.target.dataset && e.target.dataset.i !== undefined) showTip(e.target); });
+  $("chart").addEventListener("pointerout", function () { $("tip").hidden = true; });
+  $("chart").addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.i !== undefined) showTip(e.target); });
+  $("chart").addEventListener("focusout", function () { $("tip").hidden = true; });
+
+  // ------------------------------------------------------------------ input actions
+  $("exFeed").addEventListener("click", function () { load(fromExample("feed"), EXAMPLES.feed.label); });
+  $("exDesign").addEventListener("click", function () { load(fromExample("design"), EXAMPLES.design.label); });
+  $("usePaste").addEventListener("click", function () { load(fromText($("paste").value), "your pasted table"); });
+  function readFile(f) {
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { $("paste").value = String(rd.result); load(fromText(String(rd.result)), "file “" + f.name + "”"); };
+    rd.onerror = function () { load({ errors: ["The file could not be read. Try saving it as CSV and upload again."] }, ""); };
+    rd.readAsText(f);
+  }
+  $("file").addEventListener("change", function () { readFile(this.files[0]); this.value = ""; });
+  var drop = $("drop");
+  drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+  drop.addEventListener("drop", function (e) { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); });
+
+  function copy(text, msgId, fallbackId) {
+    var done = function (ok) { $(msgId).textContent = ok ? "Copied." : "Select the text below and copy it."; };
+    try {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { fallback(); });
+    } catch (e) { fallback(); }
+    function fallback() {
+      done(false);
+      if (fallbackId) { var t = $(fallbackId); t.hidden = false; t.value = text; t.focus(); t.select(); }
+      else { var p = $("paste"); p.value = text; p.focus(); p.select(); }
+    }
+  }
+  var TEMPLATE = "Option,Criterion 1,Criterion 2,Criterion 3\ndirection,MIN,MIN,MAX\nweight,1,1,1\nOption A,,,\nOption B,,,\nOption C,,,\n";
+  $("copyTpl").addEventListener("click", function () { copy(TEMPLATE, "tplMsg", null); });
+  function buildCopy() {
+    var L = ["Source\t" + source, "Criteria\t" + R.on.map(function (j) { var c = S.crit[j]; return c.name + " (" + c.dir + ", weight " + c.w + ")"; }).join("; "), "",
+             "Rank\tOption\tTOPSIS score\tBest trade-off"];
+    if (R.scores) {
+      R.setIdx.map(function (_, k) { return k; }).sort(function (a, b) { return R.scores[b] - R.scores[a]; }).forEach(function (k) {
+        var i = R.setIdx[k]; L.push(R.ranks[k] + "\t" + S.names[i] + "\t" + R.scores[k].toFixed(4) + "\t" + (R.P.kept[i] ? "yes" : "no"));
+      });
+    }
+    var rem = []; R.P.kept.forEach(function (k, i) { if (!k) rem.push(S.names[i] + "\tbeaten by\t" + S.names[R.P.witness[i]]); });
+    if (rem.length) { L.push("", "Removed options"); L = L.concat(rem); }
+    copyText = L.join("\n");
+  }
+  $("copyRes").addEventListener("click", function () { if (R) copy(copyText, "copyMsg", "copyFallback"); });
+
+  // ------------------------------------------------------------------ self-check against the published study
+  (function selfCheck() {
+    var e = EXAMPLES.feed, el = $("selfcheck");
+    var res = topsis(e.rows.map(function (r) { return r.slice(1); }), e.crit.map(function (c) { return c[2]; }), e.crit.map(function (c) { return c[1]; }));
+    var diff = res.score ? Math.max.apply(null, res.score.map(function (s, i) { return Math.abs(s - e.expected[i]); })) : Infinity;
+    var ok = diff <= 1e-9;
+    el.classList.toggle("fail", !ok);
+    el.lastElementChild.textContent = ok
+      ? "Calculation check passed: reproduces all 11 published scores of Bērziņa et al. 2024 (largest difference " +
+        (diff === 0 ? "0" : diff.toExponential(0)) + ")"
+      : "Calculation check failed: results differ from the published study. Do not use the results.";
+  })();
+
+  load(fromExample("design"), EXAMPLES.design.label);
+})();
+</script>
+
+</body>
+</html>
